@@ -1,0 +1,5 @@
+checkpoints/
+checkpoints_sft/
+data/
+__pycache__/
+*.pyc

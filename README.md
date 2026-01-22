@@ -1,22 +1,23 @@
-```
 # 🦙 Tiny-LLaMA-From-Scratch (HappyLLM Implementation)
 
 > **本项目是一个基于 PyTorch 原生代码的大语言模型复现工程。**
 > 旨在从零开始（From Scratch）构建一个架构对齐 LLaMA 的 Transformer 模型，并在单卡 RTX 5070 (12GB) 上完成了从 Tokenizer 训练、预训练 (Pretrain) 到指令微调 (SFT) 的全流程闭环。
 
+<div align="center">
+
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.12-green.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.9-orange.svg)
 
----
+</div>
 
-### ⚠️ 项目性质说明 (Disclaimer)
+## ⚠️ 项目性质说明 (Disclaimer)
 
-**本项目为个人学习性质的复现工程 (Educational Purpose)。**
-为了快速验证代码管线与架构的正确性，模型仅使用 **10,000 条 (10k)** 样本进行训练。因此，模型**不具备**实际的对话智能或逻辑推理能力（可能会出现复读、逻辑不通等现象）。
-**本项目的核心价值在于：** 跑通大模型从 0 到 1 的完整代码流程，深入理解 Transformer 底层细节与训练机制。
-
----
+> **本项目为个人学习性质的复现工程 (Educational Purpose)。**
+>
+> 为了快速验证代码管线与架构的正确性，模型仅使用 **10,000 条 (10k)** 样本进行训练。因此，模型**不具备**实际的对话智能或逻辑推理能力（可能会出现复读、逻辑不通等现象）。
+>
+> **本项目的核心价值在于：** 跑通大模型从 0 到 1 的完整代码流程，深入理解 Transformer 底层细节与训练机制。
 
 ## 🌟 项目亮点 (Key Features)
 
@@ -36,9 +37,9 @@
 
 ```text
 .
-├── checkpoints/          # 预训练模型权重存档
-├── checkpoints_sft/      # SFT 微调后模型权重存档
-├── data/                 # 存放 jsonl 数据集
+├── checkpoints/          # (已忽略) 预训练模型权重存档
+├── checkpoints_sft/      # (已忽略) SFT 微调后模型权重存档
+├── data/                 # (已忽略) 存放 jsonl 数据集
 ├── model.py              # 【核心】Transformer、RMSNorm、RoPE、Attention 架构实现
 ├── dataset.py            # 预训练数据处理 (Padding, Tokenization)
 ├── dataset_sft.py        # SFT 数据处理 (Prompt Template, Loss Masking)
@@ -47,8 +48,10 @@
 ├── inference.py          # 基础模型推理脚本
 ├── inference_sft.py      # SFT 对话模型推理脚本 (含对话模板)
 ├── train_tokenizer.py    # 分词器训练脚本
-└── tokenizer.model       # 训练好的分词器二进制文件
-```
+├── tokenizer.model       # 训练好的分词器二进制文件
+├── requirements.txt      # 项目依赖库列表
+└── README.md             # 项目说明文档
+``` 
 
 ## 🛠️ 快速开始 (Quick Start)
 
@@ -120,7 +123,7 @@ python inference_sft.py
 
 - **Paper**: [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971)
 - **Guide**: [Datawhale HappyLLM Project](https://github.com/datawhalechina/happy-llm)
-- **Guide**：https://datawhalechina.github.io/happy-llm/#/./chapter5/%E7%AC%AC%E4%BA%94%E7%AB%A0%20%E5%8A%A8%E6%89%8B%E6%90%AD%E5%BB%BA%E5%A4%A7%E6%A8%A1%E5%9E%8B
+- **Guide**：https://datawhalechina.github.io/happy-llm
 
 ## 🙏 致谢 (Acknowledgements)
 

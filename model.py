@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple, List
 
 # 1. 配置类
 # 作用：把模型所有的超参数都放在一个地方方便管理
@@ -126,7 +126,14 @@ class Attention(nn.Module):
         
         self.dropout = args.dropout
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor] = None):
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        freqs_cis: torch.Tensor, 
+        mask: Optional[torch.Tensor] = None,
+        # 【新增】kv_cache: 接收上一轮的 (k, v) 缓存
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None 
+    ):
         # x.shape = (batch_size, seq_len, dim)
         bsz, seqlen, _ = x.shape
 
@@ -140,7 +147,27 @@ class Attention(nn.Module):
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
         # 旋转位置编码（RoPE）：给Q和K加上位置信息，注意：V不需要加位置编码
+        # 注意：这里的 freqs_cis 已经是根据 start_pos 切片好的，所以直接用
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+
+        # ========================================================
+        # 【新增】KV Cache 核心逻辑
+        # 作用：把当前算出来的 K 和 V，拼接到历史的 K 和 V 后面
+        # ========================================================
+        if kv_cache is not None:
+            cache_k, cache_v = kv_cache
+            # 这里的 xk, xv 是当前这一个 token 的 (Batch, 1, n_kv_heads, head_dim)
+            # cache_k, cache_v 是历史所有的 tokens
+            # 我们在 seq_len 维度 (dim=1) 进行拼接
+            # TODO: 工业界通常用预分配内存 (Scatter) 来避免 cat 的内存开销，但为了教学，cat 最好懂
+            
+            # 拼接历史和现在
+            xk = torch.cat([cache_k, xk], dim=1)
+            xv = torch.cat([cache_v, xv], dim=1)
+            
+        # 更新缓存：把拼接后完整的 KV 保存下来，传给下一轮
+        # 如果是训练模式(kv_cache is None)，new_kv_cache 也就是当前的 xk, xv
+        new_kv_cache = (xk, xv)
 
         # GQA处理：如果KV头数少，需要复制扩展
         if self.n_rep > 1:
@@ -174,7 +201,8 @@ class Attention(nn.Module):
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
 
         # 投影：把输出变成输出层
-        return self.wo(output)
+        # 【新增返回值】同时返回 output 和 new_kv_cache
+        return self.wo(output), new_kv_cache
     
 
 # 5.前馈神经网络FeedForward
@@ -218,13 +246,29 @@ class TransformerBlock(nn.Module):
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
 
-    def forward(self, x: torch.Tensor, freqs_cis: torch.Tensor, mask: Optional[torch.Tensor]):
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        freqs_cis: torch.Tensor, 
+        mask: Optional[torch.Tensor],
+        # 【新增】接收 kv_cache
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
+    ):
         # 残差连接(Residal Connection): x = x + f(x)
-        # 先做Norm，再做Attention，结果加回x
-        h = x + self.attention.forward(self.attention_norm(x), freqs_cis, mask)
+        # 【修改】Attention现在返回两个值：输出h 和 新的cache
+        h_attn, new_kv_cache = self.attention.forward(
+            self.attention_norm(x), 
+            freqs_cis, 
+            mask,
+            kv_cache=kv_cache # 传进去
+        )
+        h = x + h_attn
+        
         # 先做Norm，再做FeedForward，结果加回h
         out = h + self.feed_forward.forward(self.ffn_norm(h))
-        return out
+        
+        # 【修改】返回 out 和 new_kv_cache
+        return out, new_kv_cache
     
 # 7.Transformer模型
 # 作用：搭积木，把Embedding，32层Block，输出层组装在一起
@@ -255,14 +299,22 @@ class Transformer(nn.Module):
         freqs_cis = precompute_freqs_cis(params.dim // params.n_heads, params.max_seq_len * 2)
         self.register_buffer("freqs_cis", freqs_cis, persistent=False)
 
-    def forward(self, tokens: torch.Tensor, start_pos: int = 0):
+    def forward(
+        self, 
+        tokens: torch.Tensor, 
+        # 【新增】start_pos: 当前生成的起始位置 (用于RoPE和Cache定位)
+        start_pos: int = 0,
+        # 【新增】kv_caches: 接收所有层的 cache 列表
+        kv_caches: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None
+    ):
         # tokens shape: (Batch, Seq_Len)
         bsz, seqlen = tokens.shape
 
         # 查表：ID变成向量
         h = self.tok_embeddings(tokens)
         
-        # 获取对应的RePE 旋转矩阵
+        # 获取对应的RoPE 旋转矩阵
+        # 【修改】根据 start_pos 切片，确保推理时只取当前位置的频率
         freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
 
         # 生成Mask
@@ -273,18 +325,32 @@ class Transformer(nn.Module):
             mask = torch.triu(mask, diagonal=1) # 保留上三角，对角线偏移1
 
             # 为了处理start_pos(推理时的缓存)，可能需要横向扩展mask
-            mask = torch.hstack([torch.zeros((seqlen,start_pos), device=tokens.device),mask]).type_as(h)
+            # 如果 start_pos > 0，说明前面有 cache，mask 需要把前面的位置设为 0 (可见)
+            if start_pos > 0:
+                mask = torch.hstack([torch.zeros((seqlen,start_pos), device=tokens.device),mask]).type_as(h)
+
+        # 【新增】用于收集每一层更新后的 cache
+        new_kv_caches = []
 
         # 一层层流过TransformerBlocks
-        for layer in self.layers:
-            h = layer(h, freqs_cis, mask)
+        for i, layer in enumerate(self.layers):
+            # 取出当前层对应的 cache (如果有)
+            layer_cache = kv_caches[i] if kv_caches is not None else None
+            
+            # 【修改】接收 output 和 new_cache
+            h, new_cache = layer(h, freqs_cis, mask, kv_cache=layer_cache)
+            
+            # 收集更新后的 cache
+            new_kv_caches.append(new_cache)
         
         # 最终归一化
         h = self.norm(h)
 
         # 映射回词表大小，得到Logits
         output = self.output(h).float()
-        return output
+        
+        # 【修改】返回 output (logits) 和 new_kv_caches
+        return output, new_kv_caches
 
 # ==========================================
 # 增强版验证代码 (Forward + Backward)
@@ -326,12 +392,16 @@ if __name__ == "__main__":
     # ==========================
     print("\n🔄 [Step 1] 测试前向传播 (Forward)...")
     try:
-        logits = model(inputs)
+        # 【修改】这里需要用 tuple 解包，因为 forward 现在返回两个值
+        logits, _ = model(inputs) 
+        
         print(f"✅ 前向传播成功！输出形状: {logits.shape}")
         # 检查输出维度是不是 (B, L, Vocab_Size)
         assert logits.shape == (batch_size, seq_len, args.vocab_size)
     except Exception as e:
         print(f"❌ 前向传播失败: {e}")
+        import traceback
+        traceback.print_exc()
         exit()
 
     # ==========================

@@ -3,5 +3,5 @@ checkpoints_sft/
 data/
 __pycache__/
 *.pyc
-# 忽略我的私人机器人代码
 bot_happyllm.py
+*_old.py

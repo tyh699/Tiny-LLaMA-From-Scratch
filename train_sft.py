@@ -66,7 +66,7 @@ def train_sft():
             x, y = x.to(device), y.to(device)
 
             # 前向传播
-            logits = model(x)
+            logits, _ = model(x)
 
             # 计算 Loss
             # 注意：dataset_sft.py 里已经把 Prompt 部分的 label 设为 -100 了

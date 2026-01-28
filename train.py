@@ -58,7 +58,7 @@ def train():
 
             # 【面试必看 1】前向传播
             # 这里的 logits 形状是 (Batch, Seq_Len, Vocab_Size)
-            logits = model(x)
+            logits, _ = model(x)
 
             # 【面试必看 2】计算 Loss
             # 大模型的训练本质就是分类问题：预测下一个词的概率

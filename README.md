@@ -37,18 +37,19 @@
 
 ```text
 .
-├── checkpoints/          # (已忽略) 预训练模型权重存档
-├── checkpoints_sft/      # (已忽略) SFT 微调后模型权重存档
+├── checkpoints/          # (自动生成/已忽略) 预训练模型权重存档
+├── checkpoints_sft/      # (自动生成/已忽略) SFT 微调后模型权重存档
 ├── data/                 # (已忽略) 存放 jsonl 数据集
-├── model.py              # 【核心】Transformer、RMSNorm、RoPE、Attention 架构实现
-├── dataset.py            # 预训练数据处理 (Padding, Tokenization)
-├── dataset_sft.py        # SFT 数据处理 (Prompt Template, Loss Masking)
-├── train.py              # 预训练脚本
-├── train_sft.py          # SFT 微调脚本 (加载预训练权重 -> 微调)
-├── inference.py          # 基础模型推理脚本
-├── inference_sft.py      # SFT 对话模型推理脚本 (含对话模板)
+├── model.py              # 【核心】Transformer 架构 (含 RoPE, RMSNorm, KV Cache 注意力优化)
+├── inference.py          # 【核心】推理主入口 (集成 SFT 对话模板 + KV Cache 加速 + 温度采样)
+├── train.py              # 预训练脚本 (Pre-training)
+├── train_sft.py          # SFT 微调脚本 (Supervised Fine-Tuning)
+├── dataset.py            # 预训练数据加载器
+├── dataset_sft.py        # SFT 数据加载器 (Mask Loss 处理)
 ├── train_tokenizer.py    # 分词器训练脚本
-├── tokenizer.model       # 训练好的分词器二进制文件
+├── download_mini_data.py # 数据集下载工具
+├── tokenizer.model       # 训练好的分词器模型
+├── tokenizer.vocab       # 分词器词表文件
 ├── requirements.txt      # 项目依赖库列表
 └── README.md             # 项目说明文档
 ``` 

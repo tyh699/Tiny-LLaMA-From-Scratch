@@ -13,7 +13,7 @@ class ModelArgs:
     n_layers: int = 32 #Transformer 层数
     n_heads: int = 32 #多头注意力的头数
     n_kv_heads: Optional[int] = None #KV Cache的头数（用于GQA，若为None则等于 n_heads）
-    vocab_size: int = -1 #词表大小（通常在家在tokenizer后设置）
+    vocab_size: int = -1 #词表大小（通常在加载tokenizer后设置）
     multiple_of: int = 256 #FFN隐藏层维度的倍数（用于SwiGLU维度对齐）
     ffn_dim_multiplier: Optional[float] = None #用于微调FFN中间层大小的系数
     norm_eps: float = 1e-5 #RMSNorm 的epsilon 防止分母为0
@@ -28,11 +28,11 @@ class RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        #这是一个课学习的缩放参数，模型会自动调整它来放大或缩小模型
+        #这是一个可学习的缩放参数，模型会自动调整它来放大或缩小模型
         self.weight = nn.Parameter(torch.ones(dim))
 
     def _norm(self,x):
-        # 公式： x*(1/sqrt(mean(x^2) + eps))
+        # 公式： x*(1/sqrt(mean(x^2) + eps))  $$\bar{x}_i = \frac{x_i}{\sqrt{\frac{1}{n} \sum x_i^2 + \epsilon}}$$
         # x.pow(2):所有数平方
         # mean(-1):在最后一个维度求均值
         # rsqrt:平方根的倒数
@@ -98,7 +98,7 @@ def apply_rotary_emb(
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
-# 注意力机制 这是transformer的心脏
+# 4.注意力机制 这是transformer的心脏
 class Attention(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -272,7 +272,7 @@ class Transformer(nn.Module):
             mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
             mask = torch.triu(mask, diagonal=1) # 保留上三角，对角线偏移1
 
-            # 为了除了start_pos(推理时的缓存)，可能需要横向扩展mask
+            # 为了处理start_pos(推理时的缓存)，可能需要横向扩展mask
             mask = torch.hstack([torch.zeros((seqlen,start_pos), device=tokens.device),mask]).type_as(h)
 
         # 一层层流过TransformerBlocks
